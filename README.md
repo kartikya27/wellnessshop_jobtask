@@ -65,7 +65,7 @@ OPENAI_BASE_URL=https://openrouter.ai/api/v1
 The assistant uses the OpenAI-compatible `/chat/completions` format, so you can also point `OPENAI_BASE_URL` to another compatible provider:
 
 ```env
-SANDBOXAIKEY-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
+
 OPENAI_MODEL=gpt-4o-mini
 OPENAI_BASE_URL=https://api.openai.com/v1
 ```
