@@ -1,32 +1,9 @@
-# D2C Brand Department Metrics Dashboard
-
-Laravel project for a D2C brand analytics assignment covering Marketing and Operations metrics. It includes seeded analytics data, API endpoints, separate Blade dashboards, date filters, operations controls, and an embedded AI assistant.
-
-## Current Scope
-
-- Marketing tables: `ad_platforms`, `campaigns`, `campaign_daily_metrics`
-- Operations tables: `couriers`, `rto_reasons`, `orders`, `shipments`, `lost_cases`
-- Seeder: three months of daily D2C data across 2 ad platforms, 6 campaigns, 4 couriers, RTO reasons, delivered/RTO/lost shipments, claim values, spend, revenue, impressions, clicks, and conversions
-- Eloquent models for each table so the controllers use model queries instead of raw SQL
-- Split seeders by table/domain for easier reading and review
-- Separate server-rendered Blade pages for Marketing, Operations, Orders, Campaigns, Shipments, RTO Reasons, Lost Cases, and AI Assistant
-- Marketing and Operations pages now include extra filters for platform, courier, status, and text search
-- Charts are rendered from a dedicated Vite bundle so the dashboard stays simple while still showing proper line/bar visuals
-- Order control page for filtering orders and updating status
-- Detail pages for campaigns, shipments, RTO reasons, and lost cases
-- RTO reason controls to add, edit, and delete reason labels
-- Embedded AI assistant that receives the current dashboard data as context and stores short session history
-- Floating AI chat drawer available across dashboard/detail pages
-- Full AI Assistant page with saved chat sessions
-- Chat persistence tables: `ai_chat_sessions`, `ai_chat_messages`
-- Local database: SQLite by default
 
 ## Requirements
 
 - PHP 8.3+
 - Composer
-- Node.js and npm
-- SQLite for local development, or MySQL/PostgreSQL if you update `.env`
+- Node.js and npm ,or MySQL/PostgreSQL if you update `.env`
 
 ## Setup
 
@@ -44,54 +21,22 @@ php artisan serve
 Open:
 
 - `http://127.0.0.1:8000/marketing`
-- `http://127.0.0.1:8000/operations`
-- `http://127.0.0.1:8000/orders`
-- `http://127.0.0.1:8000/campaigns`
-- `http://127.0.0.1:8000/shipments`
-- `http://127.0.0.1:8000/rto-reasons`
-- `http://127.0.0.1:8000/lost-cases`
-- `http://127.0.0.1:8000/assistant`
+
 
 Frontend entry files:
 
-- `resources/js/app.js` powers only the AI assistant UI
+- `resources/js/app.js` AI assistant UI
 - `resources/js/dashboard-charts.js` renders the dashboard charts
 
 The project currently uses SQLite:
 
 ```env
 DB_CONNECTION=sqlite
-```
 
-For OpenRouter-powered assistant responses, add:
-
-```env
-OPENAI_API_KEY=your_openrouter_key
-OPENAI_MODEL=openai/gpt-4o-mini
-OPENAI_BASE_URL=https://openrouter.ai/api/v1
-```
-
-The assistant uses the OpenAI-compatible `/chat/completions` format, so you can also point `OPENAI_BASE_URL` to another compatible provider:
-
-```env
 OPENAI_API_KEY="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"
 OPENAI_MODEL=gpt-4o-mini
 OPENAI_BASE_URL=https://api.openai.com/v1
 ```
-
-If `OPENAI_API_KEY` is empty, the assistant still returns a local fallback answer based on the current dashboard context so the demo remains functional.
-
-## Seeded Data Design
-
-The seeder is intentionally analytics-friendly:
-
-- Marketing data is stored daily at campaign level, which makes date-range filters, platform filters, ROAS, CAC, CPM, CTR, CPC, and trend charts easy to calculate.
-- Campaigns belong to ad platforms, keeping Meta and Google reporting normalized.
-- Orders are separate from shipments so revenue/order dimensions can be filtered independently from logistics performance.
-- Shipments carry courier, delivery, RTO, and shipping speed fields for OTD %, RTO %, average ship time, and courier scorecards.
-- Lost cases are tracked separately with claim status and recovered amount for the `/api/ops/lost-cases` endpoint.
-
-## API Endpoints
 
 Marketing:
 
@@ -122,17 +67,6 @@ AI:
 - `POST /assistant/sessions`
 - `GET /assistant/sessions/{sessionKey}/messages`
 
-## UI Decisions
-
-- The UI uses a light, minimal SaaS dashboard style instead of a dark generated-looking layout.
-- Marketing and Operations are separate routes so the department split is clear to reviewers.
-- Cards show top-level KPIs, charts show trends, and tables expose campaign/courier details.
-- The Operations page includes RTO reason management because RTO analysis often requires maintaining clean reason labels.
-- The Orders page gives backend-style controls for filtering records and updating shipment status.
-- Campaigns, Shipments, RTO Reasons, and Lost Cases have separate detail pages so the project feels like a real internal tool rather than only a KPI screen.
-- The AI assistant is a floating chat drawer plus a separate full chat page.
-- Chat sessions are stored in database tables instead of only browser memory, so conversations can be revisited and used as short-term memory.
-- Responses are rendered with paragraph and bullet formatting for readability.
 
 ## Optimised Query Note
 
@@ -157,10 +91,3 @@ EXPLAIN: SEARCH shipments USING INDEX shipments_courier_id_shipped_on_index; SEA
 ```
 
 Why this helps: the dashboard repeatedly filters operations metrics by date and courier. The composite index keeps the scorecard query aligned with that access pattern.
-
-## Verification
-
-```bash
-php artisan test
-npm run build
-```
