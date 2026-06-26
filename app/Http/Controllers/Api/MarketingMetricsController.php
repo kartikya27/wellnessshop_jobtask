@@ -3,10 +3,10 @@
 namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
-use Illuminate\Database\Query\Builder;
+use App\Models\Campaign;
+use App\Models\CampaignDailyMetric;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
-use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\Rule;
 
 class MarketingMetricsController extends Controller
@@ -14,23 +14,24 @@ class MarketingMetricsController extends Controller
     public function overview(Request $request): JsonResponse
     {
         [$from, $to] = $this->dateRange($request);
+        $metrics = $this->metricsQuery($from, $to)->get();
 
-        $metrics = $this->marketingBaseQuery($from, $to)
-            ->selectRaw('
-                COALESCE(SUM(campaign_daily_metrics.spend), 0) as total_spend,
-                COALESCE(SUM(campaign_daily_metrics.revenue), 0) as revenue,
-                COALESCE(SUM(campaign_daily_metrics.conversions), 0) as conversions,
-                ROUND(COALESCE(SUM(campaign_daily_metrics.revenue) / NULLIF(SUM(campaign_daily_metrics.spend), 0), 0), 2) as blended_roas,
-                ROUND(COALESCE(SUM(campaign_daily_metrics.spend) / NULLIF(SUM(campaign_daily_metrics.conversions), 0), 0), 2) as blended_cac
-            ')
-            ->first();
+        $totalSpend = $metrics->sum('spend');
+        $revenue = $metrics->sum('revenue');
+        $conversions = $metrics->sum('conversions');
 
         return response()->json([
             'filters' => compact('from', 'to'),
-            'data' => $metrics,
+            'data' => [
+                'total_spend' => round($totalSpend, 2),
+                'revenue' => round($revenue, 2),
+                'conversions' => $conversions,
+                'blended_roas' => round($revenue / max($totalSpend, 1), 2),
+                'blended_cac' => round($totalSpend / max($conversions, 1), 2),
+            ],
             'alerts' => [
-                'roas_below_threshold' => (float) $metrics->blended_roas < 2.0,
-                'cac_above_threshold' => (float) $metrics->blended_cac > 800,
+                'roas_below_threshold' => ($revenue / max($totalSpend, 1)) < 2.0,
+                'cac_above_threshold' => ($totalSpend / max($conversions, 1)) > 800,
             ],
         ]);
     }
@@ -42,25 +43,31 @@ class MarketingMetricsController extends Controller
         ]);
         [$from, $to] = $this->dateRange($request);
 
-        $metrics = $this->marketingBaseQuery($from, $to)
-            ->where('ad_platforms.slug', $validated['platform'])
-            ->selectRaw('
-                ad_platforms.slug as platform,
-                ad_platforms.name as platform_name,
-                COALESCE(SUM(campaign_daily_metrics.spend), 0) as spend,
-                COALESCE(SUM(campaign_daily_metrics.revenue), 0) as revenue,
-                ROUND(COALESCE(SUM(campaign_daily_metrics.revenue) / NULLIF(SUM(campaign_daily_metrics.spend), 0), 0), 2) as roas,
-                ROUND(COALESCE((SUM(campaign_daily_metrics.spend) / NULLIF(SUM(campaign_daily_metrics.impressions), 0)) * 1000, 0), 2) as cpm,
-                ROUND(COALESCE((SUM(campaign_daily_metrics.clicks) * 100.0) / NULLIF(SUM(campaign_daily_metrics.impressions), 0), 0), 2) as ctr,
-                ROUND(COALESCE(SUM(campaign_daily_metrics.spend) / NULLIF(SUM(campaign_daily_metrics.clicks), 0), 0), 2) as cpc,
-                ROUND(COALESCE(SUM(campaign_daily_metrics.spend) / NULLIF(SUM(campaign_daily_metrics.conversions), 0), 0), 2) as cac
-            ')
-            ->groupBy('ad_platforms.id', 'ad_platforms.slug', 'ad_platforms.name')
-            ->first();
+        $metrics = $this->metricsQuery($from, $to)
+            ->whereHas('campaign.platform', fn ($query) => $query->where('slug', $validated['platform']))
+            ->get();
+
+        $spend = $metrics->sum('spend');
+        $revenue = $metrics->sum('revenue');
+        $conversions = $metrics->sum('conversions');
+        $impressions = $metrics->sum('impressions');
+        $clicks = $metrics->sum('clicks');
+
+        $platform = $metrics->first()?->campaign?->platform;
 
         return response()->json([
             'filters' => ['platform' => $validated['platform'], 'from' => $from, 'to' => $to],
-            'data' => $metrics,
+            'data' => [
+                'platform' => $validated['platform'],
+                'platform_name' => $platform?->name ?? ucfirst($validated['platform']),
+                'spend' => round($spend, 2),
+                'revenue' => round($revenue, 2),
+                'roas' => round($revenue / max($spend, 1), 2),
+                'cpm' => round(($spend / max($impressions, 1)) * 1000, 2),
+                'ctr' => round(($clicks / max($impressions, 1)) * 100, 2),
+                'cpc' => round($spend / max($clicks, 1), 2),
+                'cac' => round($spend / max($conversions, 1), 2),
+            ],
         ]);
     }
 
@@ -68,18 +75,24 @@ class MarketingMetricsController extends Controller
     {
         [$from, $to] = $this->dateRange($request);
 
-        $campaigns = $this->marketingBaseQuery($from, $to)
-            ->selectRaw('
-                campaigns.id,
-                campaigns.name,
-                campaigns.status,
-                ad_platforms.slug as platform,
-                COALESCE(SUM(campaign_daily_metrics.spend), 0) as spend,
-                ROUND(COALESCE(SUM(campaign_daily_metrics.revenue) / NULLIF(SUM(campaign_daily_metrics.spend), 0), 0), 2) as roas
-            ')
-            ->groupBy('campaigns.id', 'campaigns.name', 'campaigns.status', 'ad_platforms.slug')
-            ->orderByDesc('spend')
-            ->get();
+        $campaigns = Campaign::query()
+            ->with(['platform', 'dailyMetrics' => fn ($query) => $query->whereBetween('metric_date', [$from, $to])])
+            ->get()
+            ->map(function (Campaign $campaign) {
+                $spend = $campaign->dailyMetrics->sum('spend');
+                $revenue = $campaign->dailyMetrics->sum('revenue');
+
+                return [
+                    'id' => $campaign->id,
+                    'name' => $campaign->name,
+                    'status' => $campaign->status,
+                    'platform' => $campaign->platform?->slug ?? 'unknown',
+                    'spend' => round($spend, 2),
+                    'roas' => round($revenue / max($spend, 1), 2),
+                ];
+            })
+            ->sortByDesc('spend')
+            ->values();
 
         return response()->json([
             'filters' => compact('from', 'to'),
@@ -91,16 +104,22 @@ class MarketingMetricsController extends Controller
     {
         [$from, $to] = $this->dateRange($request);
 
-        $trends = $this->marketingBaseQuery($from, $to)
-            ->selectRaw('
-                campaign_daily_metrics.metric_date,
-                ROUND(SUM(campaign_daily_metrics.spend), 2) as spend,
-                ROUND(SUM(campaign_daily_metrics.revenue), 2) as revenue,
-                ROUND(COALESCE(SUM(campaign_daily_metrics.revenue) / NULLIF(SUM(campaign_daily_metrics.spend), 0), 0), 2) as roas
-            ')
-            ->groupBy('campaign_daily_metrics.metric_date')
-            ->orderBy('campaign_daily_metrics.metric_date')
-            ->get();
+        $trends = $this->metricsQuery($from, $to)
+            ->get()
+            ->groupBy(fn (CampaignDailyMetric $metric) => $metric->metric_date->toDateString())
+            ->map(function ($metrics, string $date) {
+                $spend = $metrics->sum('spend');
+                $revenue = $metrics->sum('revenue');
+
+                return [
+                    'metric_date' => $date,
+                    'spend' => round($spend, 2),
+                    'revenue' => round($revenue, 2),
+                    'roas' => round($revenue / max($spend, 1), 2),
+                ];
+            })
+            ->sortKeys()
+            ->values();
 
         return response()->json([
             'filters' => compact('from', 'to'),
@@ -108,12 +127,11 @@ class MarketingMetricsController extends Controller
         ]);
     }
 
-    private function marketingBaseQuery(string $from, string $to): Builder
+    private function metricsQuery(string $from, string $to)
     {
-        return DB::table('campaign_daily_metrics')
-            ->join('campaigns', 'campaigns.id', '=', 'campaign_daily_metrics.campaign_id')
-            ->join('ad_platforms', 'ad_platforms.id', '=', 'campaigns.ad_platform_id')
-            ->whereBetween('campaign_daily_metrics.metric_date', [$from, $to]);
+        return CampaignDailyMetric::query()
+            ->with('campaign.platform')
+            ->whereBetween('metric_date', [$from, $to]);
     }
 
     /**

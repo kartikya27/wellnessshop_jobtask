@@ -1,13 +1,17 @@
 # D2C Brand Department Metrics Dashboard
 
-Laravel project for a D2C brand analytics assignment covering Marketing and Operations metrics. It includes seeded analytics data, API endpoints, separate Blade dashboards, charts, date filters, operations controls, and an embedded AI assistant.
+Laravel project for a D2C brand analytics assignment covering Marketing and Operations metrics. It includes seeded analytics data, API endpoints, separate Blade dashboards, date filters, operations controls, and an embedded AI assistant.
 
 ## Current Scope
 
 - Marketing tables: `ad_platforms`, `campaigns`, `campaign_daily_metrics`
 - Operations tables: `couriers`, `rto_reasons`, `orders`, `shipments`, `lost_cases`
 - Seeder: three months of daily D2C data across 2 ad platforms, 6 campaigns, 4 couriers, RTO reasons, delivered/RTO/lost shipments, claim values, spend, revenue, impressions, clicks, and conversions
-- Separate light UI pages for Marketing and Operations
+- Eloquent models for each table so the controllers use model queries instead of raw SQL
+- Split seeders by table/domain for easier reading and review
+- Separate server-rendered Blade pages for Marketing, Operations, Orders, Campaigns, Shipments, RTO Reasons, Lost Cases, and AI Assistant
+- Marketing and Operations pages now include extra filters for platform, courier, status, and text search
+- Charts are rendered from a dedicated Vite bundle so the dashboard stays simple while still showing proper line/bar visuals
 - Order control page for filtering orders and updating status
 - Detail pages for campaigns, shipments, RTO reasons, and lost cases
 - RTO reason controls to add, edit, and delete reason labels
@@ -47,6 +51,11 @@ Open:
 - `http://127.0.0.1:8000/rto-reasons`
 - `http://127.0.0.1:8000/lost-cases`
 - `http://127.0.0.1:8000/assistant`
+
+Frontend entry files:
+
+- `resources/js/app.js` powers only the AI assistant UI
+- `resources/js/dashboard-charts.js` renders the dashboard charts
 
 The project currently uses SQLite:
 
@@ -124,36 +133,6 @@ AI:
 - The AI assistant is a floating chat drawer plus a separate full chat page.
 - Chat sessions are stored in database tables instead of only browser memory, so conversations can be revisited and used as short-term memory.
 - Responses are rendered with paragraph and bullet formatting for readability.
-
-## Example Metric Queries
-
-Marketing overview:
-
-```sql
-SELECT
-    SUM(spend) AS total_spend,
-    SUM(revenue) AS revenue,
-    ROUND(SUM(revenue) / NULLIF(SUM(spend), 0), 2) AS blended_roas,
-    ROUND(SUM(spend) / NULLIF(SUM(conversions), 0), 2) AS blended_cac,
-    SUM(conversions) AS conversions
-FROM campaign_daily_metrics
-WHERE metric_date BETWEEN '2026-04-01' AND '2026-06-24';
-```
-
-Courier scorecard:
-
-```sql
-SELECT
-    couriers.name,
-    COUNT(shipments.id) AS orders,
-    ROUND(100.0 * SUM(CASE WHEN shipments.delivered_on <= shipments.expected_delivery_on THEN 1 ELSE 0 END) / COUNT(shipments.id), 2) AS otd_percent,
-    ROUND(100.0 * SUM(CASE WHEN shipments.status = 'rto' THEN 1 ELSE 0 END) / COUNT(shipments.id), 2) AS rto_percent,
-    SUM(CASE WHEN shipments.status = 'lost' THEN 1 ELSE 0 END) AS lost_count
-FROM shipments
-JOIN couriers ON couriers.id = shipments.courier_id
-WHERE shipments.shipped_on BETWEEN '2026-04-01' AND '2026-06-24'
-GROUP BY couriers.id, couriers.name;
-```
 
 ## Optimised Query Note
 

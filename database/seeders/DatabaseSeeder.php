@@ -22,6 +22,6 @@ class DatabaseSeeder extends Seeder
             ['name' => 'Test User', 'password' => bcrypt('password')]
         );
 
-        $this->call(DashboardMetricsSeeder::class);
+        $this->call(DashboardSeeder::class);
     }
 }

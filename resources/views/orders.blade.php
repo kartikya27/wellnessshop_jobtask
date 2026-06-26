@@ -1,81 +1,92 @@
-<!DOCTYPE html>
-<html lang="{{ str_replace('_', '-', app()->getLocale()) }}">
-    <head>
-        <meta charset="utf-8">
-        <meta name="viewport" content="width=device-width, initial-scale=1">
-        <title>Orders | D2C Metrics Dashboard</title>
-        @fonts
-        @vite(['resources/css/app.css', 'resources/js/app.js'])
-    </head>
-    <body class="bg-stone-50 text-stone-950 antialiased">
-        <main id="orders-app" class="min-h-screen">
-            <aside class="fixed inset-y-0 left-0 hidden w-64 border-r border-stone-200 bg-white lg:block">
-                <div class="border-b border-stone-200 px-6 py-5">
-                    <p class="text-xs font-semibold uppercase tracking-[0.2em] text-emerald-700">WellnessShop</p>
-                    <h1 class="mt-2 text-lg font-semibold">Metrics Console</h1>
-                </div>
-                <nav class="grid gap-1 p-4 text-sm font-medium">
-                    <a href="{{ route('dashboard.marketing') }}" class="nav-link">Marketing</a>
-                    <a href="{{ route('dashboard.operations') }}" class="nav-link">Operations</a>
-                    <a href="{{ route('campaigns.index') }}" class="nav-link">Campaigns</a>
-                    <a href="{{ route('orders.index') }}" class="nav-link active">Orders</a>
-                    <a href="{{ route('shipments.index') }}" class="nav-link">Shipments</a>
-                    <a href="{{ route('rto-reasons.index') }}" class="nav-link">RTO Reasons</a>
-                    <a href="{{ route('lost-cases.index') }}" class="nav-link">Lost Cases</a>
-                    <a href="{{ route('assistant.index') }}" class="nav-link">AI Assistant</a>
-                </nav>
-            </aside>
+@extends('layouts.dashboard', [
+    'title' => $title,
+    'subtitle' => $subtitle,
+    'eyebrow' => 'Operations',
+    'assistantDepartment' => $assistantDepartment,
+])
 
-            <section class="lg:pl-64">
-                <header class="border-b border-stone-200 bg-white">
-                    <div class="mx-auto max-w-7xl px-4 py-6 sm:px-6 lg:px-8">
-                        <p class="text-xs font-semibold uppercase tracking-[0.22em] text-emerald-700">Operations</p>
-                        <h2 class="mt-1 text-2xl font-semibold tracking-normal sm:text-3xl">Order Control Room</h2>
-                        <p class="mt-2 max-w-3xl text-sm leading-6 text-stone-600">Filter seeded orders, inspect courier and RTO details, and update operational status.</p>
-                    </div>
-                </header>
+@section('content')
+    <form method="GET" class="mb-6 rounded-xl border border-stone-200 bg-white p-4 shadow-sm">
+        <div class="grid gap-3 md:grid-cols-[1.2fr_0.7fr_0.7fr_0.7fr_0.7fr_auto]">
+            <input name="search" value="{{ $filters['search'] }}" class="field h-11" placeholder="Search order, city, tracking, courier">
+            <select name="courier" class="field h-11">
+                <option value="">All couriers</option>
+                @foreach ($couriers as $courier)
+                    <option value="{{ $courier->code }}" @selected($filters['courier'] === $courier->code)>{{ $courier->name }}</option>
+                @endforeach
+            </select>
+            <select name="status" class="field h-11">
+                <option value="">All statuses</option>
+                <option value="delivered" @selected($filters['status'] === 'delivered')>Delivered</option>
+                <option value="rto" @selected($filters['status'] === 'rto')>RTO</option>
+                <option value="lost" @selected($filters['status'] === 'lost')>Lost</option>
+            </select>
+            <input type="date" name="from" value="{{ $filters['from'] }}" class="field h-11">
+            <input type="date" name="to" value="{{ $filters['to'] }}" class="field h-11">
+            <button type="submit" class="btn-primary h-11 self-end">Filter</button>
+        </div>
+    </form>
 
-                <div class="mx-auto grid max-w-7xl gap-6 px-4 py-6 sm:px-6 lg:px-8">
-                    <form id="order-filter" class="panel grid gap-3 md:grid-cols-[1fr_1fr_1fr_1fr_auto]">
-                        <input id="order-search" class="field" placeholder="Search order, tracking, city">
-                        <select id="order-status" class="field">
-                            <option value="">All statuses</option>
-                            <option value="delivered">Delivered</option>
-                            <option value="rto">RTO</option>
-                            <option value="lost">Lost</option>
-                        </select>
-                        <input id="orders-from-date" type="date" class="field">
-                        <input id="orders-to-date" type="date" class="field">
-                        <button class="btn-primary" type="submit">Filter</button>
-                    </form>
-
-                    <section class="panel overflow-hidden p-0">
-                        <div class="panel-header border-b border-stone-200 p-4">
-                            <div>
-                                <h3 class="panel-title">Orders</h3>
-                                <p class="panel-copy">Latest 80 matching records from seeded shipment data.</p>
-                            </div>
-                        </div>
-                        <div class="overflow-x-auto">
-                            <table class="data-table">
-                                <thead>
-                                    <tr>
-                                        <th>Order</th>
-                                        <th>Customer</th>
-                                        <th>Courier</th>
-                                        <th>Status</th>
-                                        <th>RTO reason</th>
-                                        <th class="text-right">Value</th>
-                                        <th class="text-right">Action</th>
-                                    </tr>
-                                </thead>
-                                <tbody id="orders-table"></tbody>
-                            </table>
-                        </div>
-                    </section>
-                </div>
-            </section>
-        </main>
-        @include('partials.assistant-widget', ['department' => 'operations'])
-    </body>
-</html>
+    <section class="rounded-xl border border-stone-200 bg-white shadow-sm">
+        <div class="border-b border-stone-200 px-4 py-4">
+            <h3 class="text-base font-semibold text-stone-950">Orders</h3>
+            <p class="mt-1 text-sm text-stone-600">Latest matching records from the seeded shipment data.</p>
+        </div>
+        <div class="overflow-x-auto">
+            <table class="data-table">
+                <thead>
+                    <tr>
+                        <th>Order</th>
+                        <th>Customer</th>
+                        <th>Courier</th>
+                        <th>Status</th>
+                        <th>RTO Reason</th>
+                        <th class="text-right">Value</th>
+                        <th class="text-right">Update</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    @forelse ($orders as $order)
+                        <tr>
+                            <td>
+                                <div class="font-medium text-stone-950">{{ $order['order_number'] }}</div>
+                                <div class="text-xs text-stone-500">{{ $order['order_date'] }}</div>
+                            </td>
+                            <td>
+                                <div class="font-medium text-stone-950">{{ $order['customer_city'] }}</div>
+                                <div class="text-xs text-stone-500">{{ $order['customer_state'] }}</div>
+                            </td>
+                            <td>
+                                <div class="font-medium text-stone-950">{{ $order['courier'] }}</div>
+                                <div class="text-xs text-stone-500">{{ $order['courier_code'] }}</div>
+                            </td>
+                            <td>
+                                <span class="inline-flex rounded-md px-2 py-1 text-xs font-semibold capitalize {{ $order['status'] === 'delivered' ? 'bg-emerald-100 text-emerald-700' : ($order['status'] === 'rto' ? 'bg-amber-100 text-amber-700' : 'bg-rose-100 text-rose-700') }}">
+                                    {{ str_replace('_', ' ', $order['status']) }}
+                                </span>
+                            </td>
+                            <td>{{ $order['rto_reason'] }}</td>
+                            <td class="text-right">₹{{ number_format($order['order_value']) }}</td>
+                            <td class="text-right">
+                                <form method="POST" action="{{ route('orders.status.update', $order['id']) }}" class="inline-flex items-center gap-2">
+                                    @csrf
+                                    @method('PATCH')
+                                    <select name="status" class="field !w-36 !py-2">
+                                        <option value="delivered" @selected($order['status'] === 'delivered')>Delivered</option>
+                                        <option value="rto" @selected($order['status'] === 'rto')>RTO</option>
+                                        <option value="lost" @selected($order['status'] === 'lost')>Lost</option>
+                                    </select>
+                                    <button class="btn-secondary" type="submit">Save</button>
+                                </form>
+                            </td>
+                        </tr>
+                    @empty
+                        <tr>
+                            <td colspan="7" class="px-4 py-8 text-center text-stone-500">No orders match the selected filters.</td>
+                        </tr>
+                    @endforelse
+                </tbody>
+            </table>
+        </div>
+    </section>
+@endsection
