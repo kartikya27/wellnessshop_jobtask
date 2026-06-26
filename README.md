@@ -3,7 +3,7 @@
 
 - PHP 8.3+
 - Composer
-- Node.js and npm ,or MySQL/PostgreSQL if you update `.env`
+- Node.js and npm
 
 ## Setup
 
